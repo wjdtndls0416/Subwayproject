@@ -252,8 +252,7 @@ def render_timeline(selected_train_no: str) -> None:
 
 def render_empty_panel(total_rows: int) -> None:
     """관측 열차가 없을 때도 기존 화면 구조를 유지한다."""
-    st.warning(f"현재 망우~회기 관측 구간에서 회기 방향 열차를 찾지 못했어요.")
-    st.caption(f"경의중앙선 전체 {total_rows}건 수신 · 마지막 갱신 : {now():%H:%M:%S}")
+    st.warning(f"망우-회기 구간에서 회기 방향 열차를 찾지 못했어요.")
     st.selectbox(
         "관측할 회기 방향 열차",
         ["현재 관측 중인 열차 없음"],
@@ -284,7 +283,6 @@ def render_empty_panel(total_rows: int) -> None:
             "현재 역": "-",
             "운행 상태": "-",
             "TOPIS 원본 수신시각": "-",
-            "해석된 수신시각": "-",
         })
 
 
