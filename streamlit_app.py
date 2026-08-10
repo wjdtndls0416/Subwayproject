@@ -161,7 +161,7 @@ def render_timeline(selected_train_no: str) -> None:
         st.markdown(f"**{observed_time}**　`{item['station']} · {item['status']}`　→ {item['destination']}행")
 
 
-st.title("🚆 회기역 열차 접근 현황")
+st.title("경의중앙선 실시간 위치")
 
 key = secret_key()
 if not key:
