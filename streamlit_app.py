@@ -13,7 +13,7 @@ st.set_page_config(page_title="회기역 열차 접근 현황", page_icon="🚆"
 SEOUL = ZoneInfo("Asia/Seoul")
 LINE_NAME = "경의중앙선"
 API_BASE = "http://swopenapi.seoul.go.kr/api/subway"
-TRACK = ["중랑", "회기", "청량리", "왕십리"]
+TRACK = ["망우", "상봉", "중랑", "회기"]
 TARGET_UPDN_LINES = {"상행", "0"}
 STATUS_LABELS = {"0": "진입", "1": "도착", "2": "출발", "3": "전역 출발"}
 REFRESH_SECONDS = 5
@@ -60,8 +60,8 @@ def parse_api_time(value: str) -> datetime | None:
     return None
 
 
-def is_wangsimni_bound(row: dict) -> bool:
-    """중랑→회기→청량리→왕십리 방향인 상행 열차만 고른다."""
+def is_hoegi_bound(row: dict) -> bool:
+    """망우→상봉→중랑→회기 방향인 상행 열차만 고른다."""
     direction = str(row.get("updnLine", "")).strip()
     return direction in TARGET_UPDN_LINES
 
@@ -152,7 +152,7 @@ def duration_text(minutes: float) -> str:
 def render_stage_duration(selected_train_no: str) -> None:
     duration_minutes, stage_label = stage_duration(selected_train_no)
     st.info(
-        f"현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
+        f"앱 관측상 현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
         "지속되고 있습니다."
     )
 
@@ -181,7 +181,7 @@ def render_track(train: dict) -> None:
         @media(max-width:600px){{.board{{padding-left:8px;padding-right:8px}}.station{{font-size:.72rem;width:52px}}}}
         </style>
         <div class="board">
-          <div class="board-title">상행 · 중랑 → 회기 → 청량리 → 왕십리</div>
+          <div class="board-title">상행 · 망우 → 상봉 → 중랑 → 회기</div>
           <div class="track-wrap"><div class="rail"></div><div class="train"></div><div class="stations">{nodes}</div></div>
         </div>
         """,
@@ -196,7 +196,7 @@ def render_timeline(selected_train_no: str) -> None:
         train = next((item for item in snapshot["trains"] if item["train_no"] == selected_train_no), None)
         if train:
             entries.append((snapshot["time"], train))
-    st.subheader("데이터 갱신 타임라인")
+    st.subheader("1분 단위 관측 타임라인")
     if not entries:
         st.info("앱을 켠 뒤 첫 1분 기록을 수집하고 있어요.")
         return
@@ -205,6 +205,8 @@ def render_timeline(selected_train_no: str) -> None:
 
 
 st.title("🚆 회기역 열차 접근 현황")
+st.caption("망우 → 상봉 → 중랑 → 회기 · 회기역으로 접근하는 열차의 실시간 관측")
+st.info("회기역 도착 전 구간인 망우·상봉·중랑역의 열차 위치와 운행 상태를 표시합니다.")
 
 key = secret_key()
 if not key:
@@ -221,18 +223,18 @@ def live_panel() -> None:
         st.error(error)
         return
 
-    observed = [row for row in rows if normalize_station(row.get("statnNm", "")) in TRACK and is_wangsimni_bound(row)]
+    observed = [row for row in rows if normalize_station(row.get("statnNm", "")) in TRACK and is_hoegi_bound(row)]
     observed.sort(key=lambda row: (TRACK.index(normalize_station(row.get("statnNm", ""))), str(row.get("trainNo", ""))))
     update_stage_tracking(observed)
     record_minute_snapshot(observed)
 
     if not observed:
-        st.warning(f"현재 중랑~왕십리 관측 구간에서 왕십리 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
+        st.warning(f"현재 망우~회기 관측 구간에서 회기 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
         st.caption(f"경의중앙선 전체 {len(rows)}건 수신 · {now():%H:%M:%S} 확인")
         return
 
     labels = {train_label(row): row for row in observed}
-    choice = st.selectbox("관측할 왕십리 방향 열차", labels, key="selected_train")
+    choice = st.selectbox("관측할 회기 방향 열차", labels, key="selected_train")
     train = labels[choice]
     station = normalize_station(train.get("statnNm", ""))
     train_no = str(train.get("trainNo", "-"))
@@ -246,7 +248,7 @@ def live_panel() -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", station)
     c2.metric("운행 상태", status_text(train))
-    c3.metric("데이터 지속시간", duration_text(duration_minutes), stage_label)
+    c3.metric("관측된 단계 지속시간", duration_text(duration_minutes), stage_label)
     c4.metric("데이터 나이", f"{age:.0f}초" if age is not None else "확인 불가")
     render_stage_duration(train_no)
 
@@ -254,7 +256,7 @@ def live_panel() -> None:
     with left:
         render_timeline(train_no)
     with right:
-        st.subheader("실시간 API 정보")
+        st.subheader("현재 API 정보")
         st.json({
             "열차번호": train.get("trainNo"),
             "현재 역": station,
@@ -266,3 +268,6 @@ def live_panel() -> None:
 
 
 live_panel()
+
+st.divider()
+st.caption("서울시 TOPIS 실시간 열차 위치정보를 활용한 개인 탐구용 프로토타입입니다. 서울시 공공데이터 출처를 표시합니다.")
