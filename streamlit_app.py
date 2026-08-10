@@ -216,7 +216,7 @@ def render_track(train: dict | None = None) -> None:
         <style>
         .board {{background:#101722;border:1px solid #2c394a;border-radius:18px;padding:26px 24px 20px;color:#f4f7fb;box-shadow:0 12px 30px rgba(0,0,0,.18)}}
         .board-title {{font-size:.9rem;color:#9fb2c8;margin-bottom:28px;letter-spacing:.04em}}
-        .track-wrap {{position:relative;margin:0 3% 10px;height:92px}}
+        .track-wrap {{position:relative;margin:0 3% 10px;height:92px;transform:translateY(12px)}}
         .rail {{position:absolute;top:37px;left:0;right:0;height:6px;border-radius:9px;background:repeating-linear-gradient(90deg,#728196 0 18px,#394759 18px 27px)}}
         .stations {{position:absolute;inset:25px 0 auto;display:flex;justify-content:space-between}}
         .station {{width:70px;text-align:center;font-size:.82rem;color:#d8e2ed;transform:translateX(0)}}
