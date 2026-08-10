@@ -12,13 +12,12 @@ st.set_page_config(page_title="회기역 열차 접근 현황", page_icon="🚆"
 
 SEOUL = ZoneInfo("Asia/Seoul")
 LINE_NAME = "경의중앙선"
-API_BASE = "http://swopenapi.seoul.go.kr/api/subway"
+API_BASE = "https://swopenapi.seoul.go.kr/api/subway"
 TRACK = ["중랑", "회기", "청량리", "왕십리"]
 TARGET_UPDN_LINES = {"상행", "0"}
 STATUS_LABELS = {"0": "진입", "1": "도착", "2": "출발", "3": "전역 출발"}
 REFRESH_SECONDS = 5
-STALL_WARNING_MINUTES = 6
-MAX_SNAPSHOT_GAP_SECONDS = 150
+STAGE_TRACKING_EXPIRY_SECONDS = 180
 
 
 def now() -> datetime:
@@ -100,62 +99,62 @@ def record_minute_snapshot(rows: list[dict]) -> None:
     del snapshots[:-30]
 
 
-def detect_stalled_stage(selected_train_no: str) -> tuple[bool, float, str]:
-    """같은 위치 단계가 끊김 없이 유지된 시간을 계산한다."""
-    snapshots = st.session_state.get("minute_snapshots", [])
-    consecutive: list[tuple[datetime, dict]] = []
+def update_stage_tracking(rows: list[dict]) -> None:
+    """5초마다 열차별 현재 단계와 그 단계가 시작된 시각을 갱신한다."""
+    checked_at = now()
+    tracking = st.session_state.setdefault("stage_tracking", {})
 
-    for snapshot in reversed(snapshots):
-        train = next(
-            (item for item in snapshot["trains"] if item["train_no"] == selected_train_no),
-            None,
+    for row in rows:
+        train_no = str(row.get("trainNo", "-"))
+        stage = (
+            normalize_station(row.get("statnNm", "위치 미상")),
+            status_text(row),
         )
-        if train is None:
-            break
+        previous = tracking.get(train_no)
+        if previous is None or tuple(previous.get("stage", ())) != stage:
+            tracking[train_no] = {
+                "stage": stage,
+                "started_at": checked_at.isoformat(),
+                "last_seen_at": checked_at.isoformat(),
+            }
+        else:
+            previous["last_seen_at"] = checked_at.isoformat()
 
+    for train_no, item in list(tracking.items()):
         try:
-            observed_at = datetime.fromisoformat(snapshot["observed_at"])
+            last_seen_at = datetime.fromisoformat(item["last_seen_at"])
         except (KeyError, TypeError, ValueError):
-            break
-
-        stage = (train["station"], train["status"])
-        if consecutive:
-            newer_time, newer_train = consecutive[-1]
-            newer_stage = (newer_train["station"], newer_train["status"])
-            gap_seconds = (newer_time - observed_at).total_seconds()
-            if stage != newer_stage or gap_seconds > MAX_SNAPSHOT_GAP_SECONDS:
-                break
-
-        consecutive.append((observed_at, train))
-
-    if not consecutive:
-        return False, 0.0, "관측 기록 수집 중"
-
-    latest_time, latest_train = consecutive[0]
-    earliest_time, _ = consecutive[-1]
-    unchanged_minutes = max(0.0, (latest_time - earliest_time).total_seconds() / 60)
-    stage_label = f'{latest_train["station"]} · {latest_train["status"]}'
-    is_stalled = unchanged_minutes >= STALL_WARNING_MINUTES
-    return is_stalled, unchanged_minutes, stage_label
+            del tracking[train_no]
+            continue
+        if (checked_at - last_seen_at).total_seconds() > STAGE_TRACKING_EXPIRY_SECONDS:
+            del tracking[train_no]
 
 
-def render_stage_warning(selected_train_no: str) -> None:
-    is_stalled, unchanged_minutes, stage_label = detect_stalled_stage(selected_train_no)
-    if is_stalled:
-        st.error(
-            f"🚨 이 열차는 약 {unchanged_minutes:.0f}분 동안 위치 단계가 "
-            f"‘{stage_label}’에서 변하지 않았습니다.\n\n"
-            "평상시보다 이동이 지연되고 있거나 실시간 정보 갱신에 이상이 있을 "
-            "가능성이 있습니다. 현재 도착예정정보의 신뢰도가 낮습니다."
-        )
-    else:
-        remaining = max(0, STALL_WARNING_MINUTES - unchanged_minutes)
-        st.success(
-            f"현재 위치 단계 이상은 감지되지 않았습니다. "
-            f"‘{stage_label}’ 단계 연속 관측 약 {unchanged_minutes:.0f}분"
-        )
-        if 0 < unchanged_minutes < STALL_WARNING_MINUTES:
-            st.caption(f"같은 단계가 약 {remaining:.0f}분 더 유지되면 확인 필요 경고를 표시합니다.")
+def stage_duration(selected_train_no: str) -> tuple[float, str]:
+    item = st.session_state.get("stage_tracking", {}).get(selected_train_no)
+    if not item:
+        return 0.0, "관측 시작"
+    try:
+        started_at = datetime.fromisoformat(item["started_at"])
+    except (KeyError, TypeError, ValueError):
+        return 0.0, "관측 시작"
+    duration_minutes = max(0.0, (now() - started_at).total_seconds() / 60)
+    stage = item.get("stage", ("위치 미상", "상태 미상"))
+    return duration_minutes, f"{stage[0]} · {stage[1]}"
+
+
+def duration_text(minutes: float) -> str:
+    if minutes < 1:
+        return "1분 미만"
+    return f"약 {int(minutes)}분"
+
+
+def render_stage_duration(selected_train_no: str) -> None:
+    duration_minutes, stage_label = stage_duration(selected_train_no)
+    st.info(
+        f"앱 관측상 현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
+        "지속되고 있습니다."
+    )
 
 
 def render_track(train: dict) -> None:
@@ -226,6 +225,7 @@ def live_panel() -> None:
 
     observed = [row for row in rows if normalize_station(row.get("statnNm", "")) in TRACK and is_wangsimni_bound(row)]
     observed.sort(key=lambda row: (TRACK.index(normalize_station(row.get("statnNm", ""))), str(row.get("trainNo", ""))))
+    update_stage_tracking(observed)
     record_minute_snapshot(observed)
 
     if not observed:
@@ -241,21 +241,16 @@ def live_panel() -> None:
     received_raw = train.get("lastRecptnDt") or train.get("recptnDt") or ""
     received = parse_api_time(str(received_raw))
     age = max(0, (now() - received).total_seconds()) if received else None
-    is_stalled, unchanged_minutes, _ = detect_stalled_stage(train_no)
+    duration_minutes, stage_label = stage_duration(train_no)
 
     render_track(train)
     st.write("")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", station)
     c2.metric("운행 상태", status_text(train))
-    c3.metric(
-        "위치 단계 상태",
-        "확인 필요" if is_stalled else "정상 관측",
-        f"같은 단계 {unchanged_minutes:.0f}분",
-        delta_color="inverse" if is_stalled else "normal",
-    )
+    c3.metric("관측된 단계 지속시간", duration_text(duration_minutes), stage_label)
     c4.metric("데이터 나이", f"{age:.0f}초" if age is not None else "확인 불가")
-    render_stage_warning(train_no)
+    render_stage_duration(train_no)
 
     left, right = st.columns([1.45, 1])
     with left:
