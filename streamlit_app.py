@@ -262,7 +262,7 @@ def live_panel() -> None:
             "방향/행선지": f'{train.get("updnLine", "")} / {train.get("statnTnm", "")}',
             "TOPIS 수신시각": received_raw or "확인 불가",
         })
-    st.caption(f"마지막으로 데이터 갱신 : {now():%Y-%m-%d %H:%M:%S} ({REFRESH_SECONDS}초마다 자동 갱신"))
+    st.caption(f"마지막으로 데이터 갱신 : {now():%Y-%m-%d %H:%M:%S} ({REFRESH_SECONDS}초마다 자동 갱신)")
 
 
 live_panel()
