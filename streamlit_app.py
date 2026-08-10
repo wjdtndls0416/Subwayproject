@@ -336,7 +336,6 @@ def live_panel() -> None:
     render_stage_duration(train_no)
     st.caption(
         "‘마지막 정보 수신’은 TOPIS 최종수신시각부터 현재까지의 경과시간입니다. "
-        "열차 위치가 같은 단계로 표시된 시간은 왼쪽의 ‘앱 실행 후 관측시간’에서 확인합니다. "
         "앱을 실행하기 전의 시간은 포함되지 않습니다."
     )
 
