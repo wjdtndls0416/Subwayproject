@@ -197,7 +197,7 @@ def duration_text(minutes: float) -> str:
 def render_stage_duration(selected_train_no: str) -> None:
     duration_minutes, stage_label = stage_duration(selected_train_no)
     st.info(
-        f"현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
+        f"‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
         "지속되고 있습니다."
     )
 
