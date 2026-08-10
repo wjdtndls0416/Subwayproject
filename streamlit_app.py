@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 
 
-st.set_page_config(page_title="회기역 열차 접근 현황", page_icon="🚆", layout="wide")
+st.set_page_config(page_title="경의중앙선 실시간 위치", page_icon="🚆", layout="wide")
 
 SEOUL = ZoneInfo("Asia/Seoul")
 LINE_NAME = "경의중앙선"
@@ -196,7 +196,7 @@ def render_timeline(selected_train_no: str) -> None:
         train = next((item for item in snapshot["trains"] if item["train_no"] == selected_train_no), None)
         if train:
             entries.append((snapshot["time"], train))
-    st.subheader("1분 단위 관측 타임라인")
+    st.subheader("데이터 갱신 타임라인")
     if not entries:
         st.info("앱을 켠 뒤 첫 1분 기록을 수집하고 있어요.")
         return
@@ -204,9 +204,7 @@ def render_timeline(selected_train_no: str) -> None:
         st.markdown(f"**{observed_time}**　`{item['station']} · {item['status']}`　→ {item['destination']}행")
 
 
-st.title("🚆 회기역 열차 접근 현황")
-st.caption("망우 → 상봉 → 중랑 → 회기 · 회기역으로 접근하는 열차의 실시간 관측")
-st.info("회기역 도착 전 구간인 망우·상봉·중랑역의 열차 위치와 운행 상태를 표시합니다.")
+st.title("🚆 경의중앙선 실시간 위치")
 
 key = secret_key()
 if not key:
@@ -229,7 +227,7 @@ def live_panel() -> None:
     record_minute_snapshot(observed)
 
     if not observed:
-        st.warning(f"현재 망우~회기 관측 구간에서 회기 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
+        st.warning(f"현재 망우-회기 구간에서 회기역 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
         st.caption(f"경의중앙선 전체 {len(rows)}건 수신 · {now():%H:%M:%S} 확인")
         return
 
@@ -248,7 +246,7 @@ def live_panel() -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", station)
     c2.metric("운행 상태", status_text(train))
-    c3.metric("관측된 단계 지속시간", duration_text(duration_minutes), stage_label)
+    c3.metric("데이터 지속시간", duration_text(duration_minutes), stage_label)
     c4.metric("데이터 나이", f"{age:.0f}초" if age is not None else "확인 불가")
     render_stage_duration(train_no)
 
@@ -264,10 +262,7 @@ def live_panel() -> None:
             "방향/행선지": f'{train.get("updnLine", "")} / {train.get("statnTnm", "")}',
             "TOPIS 수신시각": received_raw or "확인 불가",
         })
-    st.caption(f"마지막 화면 갱신 {now():%Y-%m-%d %H:%M:%S} · {REFRESH_SECONDS}초마다 자동 확인")
+    st.caption(f"마지막으로 데이터 갱신 : {now():%Y-%m-%d %H:%M:%S} ({REFRESH_SECONDS}초마다 자동 갱신"))
 
 
 live_panel()
-
-st.divider()
-st.caption("서울시 TOPIS 실시간 열차 위치정보를 활용한 개인 탐구용 프로토타입입니다. 서울시 공공데이터 출처를 표시합니다.")
