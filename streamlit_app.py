@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 
 
-st.set_page_config(page_title="회기역 경의중앙선 실시간 위치", page_icon="🚆", layout="wide")
+st.set_page_config(page_title="경의중앙선 실시간 위치", page_icon="🚆", layout="wide")
 
 SEOUL = ZoneInfo("Asia/Seoul")
 LINE_NAME = "경의중앙선"
