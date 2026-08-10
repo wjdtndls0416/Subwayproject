@@ -202,15 +202,16 @@ def render_stage_duration(selected_train_no: str) -> None:
     )
 
 
-def render_track(train: dict) -> None:
-    station = normalize_station(train.get("statnNm", ""))
+def render_track(train: dict | None = None) -> None:
+    station = normalize_station(train.get("statnNm", "")) if train else ""
     index = TRACK.index(station) if station in TRACK else 0
-    state = str(train.get("trainSttus", ""))
+    state = str(train.get("trainSttus", "")) if train else ""
     offset = {"3": -0.20, "0": -0.08, "1": 0.0, "2": 0.16}.get(state, 0.0)
     position = min(100, max(0, ((index + offset) / (len(TRACK) - 1)) * 100))
     # 역 칸(70px)의 중심과 열차(50px)의 중심을 일치시킨다.
     # 이 보정으로 회기역 도착 상태에서도 열차가 마지막 역 점 바로 위에 놓인다.
     train_left_adjust = 10 - (0.7 * position)
+    train_html = '<div class="train"></div>' if train else ""
     nodes = "".join(f'<div class="station"><span class="dot"></span><b>{escape(name)}</b></div>' for name in TRACK)
     st.markdown(
         f"""
@@ -230,7 +231,7 @@ def render_track(train: dict) -> None:
         </style>
         <div class="board">
           <div class="board-title">상행 · 망우 → 상봉 → 중랑 → 회기</div>
-          <div class="track-wrap"><div class="rail"></div><div class="train"></div><div class="stations">{nodes}</div></div>
+          <div class="track-wrap"><div class="rail"></div>{train_html}<div class="stations">{nodes}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -250,6 +251,47 @@ def render_timeline(selected_train_no: str) -> None:
         return
     for observed_time, item in entries[:15]:
         st.markdown(f"**{observed_time}**　`{item['station']} · {item['status']}`　→ {item['destination']}행")
+
+
+def render_empty_panel(total_rows: int) -> None:
+    """관측 열차가 없을 때도 기존 화면 구조를 유지한다."""
+    st.warning(f"현재 망우~회기 관측 구간에서 회기 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
+    st.caption(f"경의중앙선 전체 {total_rows}건 수신 · {now():%H:%M:%S} 확인")
+    st.selectbox(
+        "관측할 회기 방향 열차",
+        ["현재 관측 중인 열차 없음"],
+        disabled=True,
+        key="empty_selected_train",
+    )
+
+    render_track()
+    st.write("")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("현재 위치", "-")
+    c2.metric("운행 상태", "-")
+    c3.metric("앱 실행 후 관측시간", "-")
+    c4.metric("마지막 정보 수신", "-")
+    st.info("현재 관측 중인 열차가 없어 표시할 정보가 없습니다.")
+    st.caption(
+        "‘마지막 정보 수신’은 TOPIS 최종수신시각부터 현재까지의 경과시간입니다. "
+        "‘앱 실행 후 관측시간’은 앱이 같은 열차의 동일 단계를 관측한 시간입니다."
+    )
+
+    left, right = st.columns([1.45, 1])
+    with left:
+        st.subheader("1분 단위 관측 타임라인")
+        st.markdown("-")
+    with right:
+        st.subheader("현재 API 정보")
+        st.json({
+            "열차번호": "-",
+            "현재 역": "-",
+            "운행 상태": "-",
+            "방향/행선지": "-",
+            "TOPIS 시간 필드": "-",
+            "TOPIS 원본 수신시각": "-",
+            "해석된 수신시각": "-",
+        })
 
 
 st.title("🚆 회기역 열차 접근 현황")
@@ -277,8 +319,7 @@ def live_panel() -> None:
     record_minute_snapshot(observed)
 
     if not observed:
-        st.warning(f"현재 망우~회기 관측 구간에서 회기 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
-        st.caption(f"경의중앙선 전체 {len(rows)}건 수신 · {now():%H:%M:%S} 확인")
+        render_empty_panel(len(rows))
         return
 
     labels = {train_label(row): row for row in observed}
