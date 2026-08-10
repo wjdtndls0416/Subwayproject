@@ -310,6 +310,9 @@ def live_panel() -> None:
 
     if not observed:
         render_empty_panel(len(rows))
+        st.caption(
+        f"마지막 데이터 갱신 {now():%Y-%m-%d %H:%M:%S} "
+        f"({REFRESH_SECONDS}초마다 자동 확인)"
         return
 
     labels = {train_label(row): row for row in observed}
