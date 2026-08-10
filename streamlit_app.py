@@ -12,7 +12,7 @@ st.set_page_config(page_title="회기역 열차 접근 현황", page_icon="🚆"
 
 SEOUL = ZoneInfo("Asia/Seoul")
 LINE_NAME = "경의중앙선"
-API_BASE = "https://swopenapi.seoul.go.kr/api/subway"
+API_BASE = "http://swopenapi.seoul.go.kr/api/subway"
 TRACK = ["중랑", "회기", "청량리", "왕십리"]
 EAST_DESTINATIONS = ("청량리", "왕십리", "덕소", "팔당", "양평", "용문", "지평")
 WEST_DESTINATIONS = ("서울역", "수색", "대곡", "능곡", "일산", "문산")
