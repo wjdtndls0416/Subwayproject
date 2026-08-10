@@ -215,7 +215,7 @@ def live_panel() -> None:
             "방향/행선지": f'{train.get("updnLine", "")} / {train.get("statnTnm", "")}',
             "TOPIS 수신시각": train.get("lastRecptnDt"),
         })
-    st.caption(f"마지막 화면 갱신 {now():%Y-%m-%d %H:%M:%S} · {REFRESH_SECONDS}초마다 자동 확인")
+    st.caption(f"마지막 데이터 갱신 {now():%Y-%m-%d %H:%M:%S} ({REFRESH_SECONDS}초마다 자동 갱신)")
 
 
 live_panel()
