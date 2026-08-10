@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 
 
-st.set_page_config(page_title="경의중앙선 실시간 위치", page_icon="🚆", layout="wide")
+st.set_page_config(page_title="회기역 열차 접근 현황", page_icon="🚆", layout="wide")
 
 SEOUL = ZoneInfo("Asia/Seoul")
 LINE_NAME = "경의중앙선"
@@ -52,12 +52,57 @@ def normalize_station(value: str) -> str:
 
 
 def parse_api_time(value: str) -> datetime | None:
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y%m%d%H%M%S"):
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    # TOPIS가 초 이하 자리나 ISO 8601 형식으로 보내는 경우도 처리한다.
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=SEOUL) if parsed.tzinfo is None else parsed.astimezone(SEOUL)
+    except ValueError:
+        pass
+
+    for fmt in (
+        "%Y%m%d%H%M%S",
+        "%Y%m%d%H%M%S%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+    ):
         try:
-            return datetime.strptime(value, fmt).replace(tzinfo=SEOUL)
+            return datetime.strptime(text, fmt).replace(tzinfo=SEOUL)
         except (TypeError, ValueError):
             pass
     return None
+
+
+def api_received_time(row: dict) -> tuple[datetime | None, str, str]:
+    """TOPIS 최종수신시각을 필드명 대소문자 차이까지 허용해 찾는다."""
+    normalized_keys = {str(key).lower(): str(key) for key in row}
+    for candidate in ("recptnDt", "lastRecptnDt"):
+        actual_key = normalized_keys.get(candidate.lower())
+        if not actual_key:
+            continue
+        raw_value = str(row.get(actual_key, "") or "").strip()
+        if raw_value:
+            return parse_api_time(raw_value), raw_value, actual_key
+    return None, "", ""
+
+
+def last_received_text(received_at: datetime | None) -> tuple[str, str]:
+    """최종수신 후 경과시간과 실제 TOPIS 수신시각을 돌려준다."""
+    if received_at is None:
+        return "수신시각 미제공", "TOPIS 수신시각 확인 불가"
+
+    seconds = max(0, int((now() - received_at).total_seconds()))
+    if seconds < 10:
+        age_label = "방금"
+    elif seconds < 60:
+        age_label = f"{seconds}초 전"
+    else:
+        minutes, remaining_seconds = divmod(seconds, 60)
+        age_label = f"{minutes}분 {remaining_seconds}초 전"
+    return age_label, f"TOPIS 수신시각 {received_at:%H:%M:%S}"
 
 
 def is_hoegi_bound(row: dict) -> bool:
@@ -152,7 +197,7 @@ def duration_text(minutes: float) -> str:
 def render_stage_duration(selected_train_no: str) -> None:
     duration_minutes, stage_label = stage_duration(selected_train_no)
     st.info(
-        f"앱 관측상 현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
+        f"앱 실행 후 현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
         "지속되고 있습니다."
     )
 
@@ -163,6 +208,9 @@ def render_track(train: dict) -> None:
     state = str(train.get("trainSttus", ""))
     offset = {"3": -0.20, "0": -0.08, "1": 0.0, "2": 0.16}.get(state, 0.0)
     position = min(100, max(0, ((index + offset) / (len(TRACK) - 1)) * 100))
+    # 역 칸(70px)의 중심과 열차(50px)의 중심을 일치시킨다.
+    # 이 보정으로 회기역 도착 상태에서도 열차가 마지막 역 점 바로 위에 놓인다.
+    train_left_adjust = 10 - (0.7 * position)
     nodes = "".join(f'<div class="station"><span class="dot"></span><b>{escape(name)}</b></div>' for name in TRACK)
     st.markdown(
         f"""
@@ -174,7 +222,7 @@ def render_track(train: dict) -> None:
         .stations {{position:absolute;inset:25px 0 auto;display:flex;justify-content:space-between}}
         .station {{width:70px;text-align:center;font-size:.82rem;color:#d8e2ed;transform:translateX(0)}}
         .dot {{display:block;width:18px;height:18px;margin:4px auto 12px;border:4px solid #eef5fb;background:#182231;border-radius:50%;box-sizing:border-box}}
-        .train {{position:absolute;top:0;left:calc({position:.2f}% - 25px);width:50px;height:29px;border-radius:8px 8px 5px 5px;background:#f7fafc;border-bottom:6px solid #52a96b;box-shadow:0 0 18px rgba(255,255,255,.38);animation:float-train 1.35s ease-in-out infinite;z-index:3}}
+        .train {{position:absolute;top:0;left:calc({position:.2f}% + {train_left_adjust:.2f}px);width:50px;height:29px;border-radius:8px 8px 5px 5px;background:#f7fafc;border-bottom:6px solid #52a96b;box-shadow:0 0 18px rgba(255,255,255,.38);animation:float-train 1.35s ease-in-out infinite;z-index:3}}
         .train:before,.train:after {{content:"";position:absolute;top:6px;width:13px;height:9px;background:#263b55;border-radius:2px}}
         .train:before {{left:7px}} .train:after {{right:7px}}
         @keyframes float-train {{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-4px)}}}}
@@ -196,7 +244,7 @@ def render_timeline(selected_train_no: str) -> None:
         train = next((item for item in snapshot["trains"] if item["train_no"] == selected_train_no), None)
         if train:
             entries.append((snapshot["time"], train))
-    st.subheader("데이터 갱신 타임라인")
+    st.subheader("1분 단위 관측 타임라인")
     if not entries:
         st.info("앱을 켠 뒤 첫 1분 기록을 수집하고 있어요.")
         return
@@ -204,7 +252,9 @@ def render_timeline(selected_train_no: str) -> None:
         st.markdown(f"**{observed_time}**　`{item['station']} · {item['status']}`　→ {item['destination']}행")
 
 
-st.title("🚆 경의중앙선 실시간 위치")
+st.title("🚆 회기역 열차 접근 현황")
+st.caption("망우 → 상봉 → 중랑 → 회기 · 회기역으로 접근하는 열차의 실시간 관측")
+st.info("회기역 도착 전 구간인 망우·상봉·중랑역의 열차 위치와 운행 상태를 표시합니다.")
 
 key = secret_key()
 if not key:
@@ -227,7 +277,7 @@ def live_panel() -> None:
     record_minute_snapshot(observed)
 
     if not observed:
-        st.warning(f"현재 망우-회기 구간에서 회기역 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
+        st.warning(f"현재 망우~회기 관측 구간에서 회기 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
         st.caption(f"경의중앙선 전체 {len(rows)}건 수신 · {now():%H:%M:%S} 확인")
         return
 
@@ -236,9 +286,8 @@ def live_panel() -> None:
     train = labels[choice]
     station = normalize_station(train.get("statnNm", ""))
     train_no = str(train.get("trainNo", "-"))
-    received_raw = train.get("lastRecptnDt") or train.get("recptnDt") or ""
-    received = parse_api_time(str(received_raw))
-    age = max(0, (now() - received).total_seconds()) if received else None
+    received_at, received_raw, received_field = api_received_time(train)
+    received_age_label, received_time_label = last_received_text(received_at)
     duration_minutes, stage_label = stage_duration(train_no)
 
     render_track(train)
@@ -246,9 +295,14 @@ def live_panel() -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", station)
     c2.metric("운행 상태", status_text(train))
-    c3.metric("데이터 지속시간", duration_text(duration_minutes), stage_label)
-    c4.metric("데이터 나이", f"{age:.0f}초" if age is not None else "확인 불가")
+    c3.metric("앱 실행 후 관측시간", duration_text(duration_minutes), stage_label, delta_color="off")
+    c4.metric("마지막 정보 수신", received_age_label, received_time_label, delta_color="off")
     render_stage_duration(train_no)
+    st.caption(
+        "‘마지막 정보 수신’은 TOPIS 최종수신시각부터 현재까지의 경과시간입니다. "
+        "열차 위치가 같은 단계로 표시된 시간은 왼쪽의 ‘앱 실행 후 관측시간’에서 확인합니다. "
+        "앱을 실행하기 전의 시간은 포함되지 않습니다."
+    )
 
     left, right = st.columns([1.45, 1])
     with left:
@@ -260,9 +314,14 @@ def live_panel() -> None:
             "현재 역": station,
             "운행 상태": status_text(train),
             "방향/행선지": f'{train.get("updnLine", "")} / {train.get("statnTnm", "")}',
-            "TOPIS 수신시각": received_raw or "확인 불가",
+            "TOPIS 시간 필드": received_field or "미제공",
+            "TOPIS 원본 수신시각": received_raw or "미제공",
+            "해석된 수신시각": received_at.strftime("%Y-%m-%d %H:%M:%S") if received_at else "해석 불가",
         })
-    st.caption(f"마지막으로 데이터 갱신 : {now():%Y-%m-%d %H:%M:%S} ({REFRESH_SECONDS}초마다 자동 갱신)")
+    st.caption(f"마지막 화면 갱신 {now():%Y-%m-%d %H:%M:%S} · {REFRESH_SECONDS}초마다 자동 확인")
 
 
 live_panel()
+
+st.divider()
+st.caption("서울시 TOPIS 실시간 열차 위치정보를 활용한 개인 탐구용 프로토타입입니다. 서울시 공공데이터 출처를 표시합니다.")
