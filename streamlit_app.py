@@ -188,7 +188,7 @@ def live_panel() -> None:
         return
 
     labels = {train_label(row): row for row in observed}
-    choice = st.selectbox("관측할 왕십리 방향 열차", labels, key="selected_train")
+    choice = st.selectbox("현재 관측 중인 열차 정보", labels, key="selected_train")
     train = labels[choice]
     station = normalize_station(train.get("statnNm", ""))
     estimate, basis = arrival_estimate(train)
