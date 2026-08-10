@@ -207,7 +207,7 @@ def live_panel() -> None:
     with left:
         render_timeline(str(train.get("trainNo", "-")))
     with right:
-        st.subheader("현재 API 정보")
+        st.subheader("실시간 API 정보")
         st.json({
             "열차번호": train.get("trainNo"),
             "현재 역": station,
