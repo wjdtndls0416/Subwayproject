@@ -152,7 +152,7 @@ def duration_text(minutes: float) -> str:
 def render_stage_duration(selected_train_no: str) -> None:
     duration_minutes, stage_label = stage_duration(selected_train_no)
     st.info(
-        f"앱 관측상 현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
+        f"현재 ‘{stage_label}’ 상태가 **{duration_text(duration_minutes)} 동안** "
         "지속되고 있습니다."
     )
 
@@ -196,7 +196,7 @@ def render_timeline(selected_train_no: str) -> None:
         train = next((item for item in snapshot["trains"] if item["train_no"] == selected_train_no), None)
         if train:
             entries.append((snapshot["time"], train))
-    st.subheader("1분 단위 관측 타임라인")
+    st.subheader("데이터 갱신 타임라인")
     if not entries:
         st.info("앱을 켠 뒤 첫 1분 기록을 수집하고 있어요.")
         return
@@ -205,8 +205,6 @@ def render_timeline(selected_train_no: str) -> None:
 
 
 st.title("🚆 회기역 열차 접근 현황")
-st.caption("중랑 → 회기 → 청량리 → 왕십리 · 회기역에서 왕십리 방향 열차를 타기 위한 실시간 관측")
-st.info("이 버전은 출발 시각을 판단하지 않습니다. 중랑역에서 회기역으로 접근하는 열차의 위치와 관측 기록에 집중합니다.")
 
 key = secret_key()
 if not key:
@@ -248,7 +246,7 @@ def live_panel() -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", station)
     c2.metric("운행 상태", status_text(train))
-    c3.metric("관측된 단계 지속시간", duration_text(duration_minutes), stage_label)
+    c3.metric("데이터 지속시간", duration_text(duration_minutes), stage_label)
     c4.metric("데이터 나이", f"{age:.0f}초" if age is not None else "확인 불가")
     render_stage_duration(train_no)
 
@@ -256,7 +254,7 @@ def live_panel() -> None:
     with left:
         render_timeline(train_no)
     with right:
-        st.subheader("현재 API 정보")
+        st.subheader("실시간 API 정보")
         st.json({
             "열차번호": train.get("trainNo"),
             "현재 역": station,
@@ -268,6 +266,3 @@ def live_panel() -> None:
 
 
 live_panel()
-
-st.divider()
-st.caption("서울시 TOPIS 실시간 열차 위치정보를 활용한 개인 탐구용 프로토타입입니다. 서울시 공공데이터 출처를 표시합니다.")
