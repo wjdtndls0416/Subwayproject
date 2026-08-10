@@ -256,7 +256,7 @@ def render_timeline(selected_train_no: str) -> None:
 def render_empty_panel(total_rows: int) -> None:
     """관측 열차가 없을 때도 기존 화면 구조를 유지한다."""
     st.warning(f"현재 망우~회기 관측 구간에서 회기 방향 열차를 찾지 못했어요. {REFRESH_SECONDS}초 뒤 다시 확인합니다.")
-    st.caption(f"경의중앙선 전체 {total_rows}건 수신 · {now():%H:%M:%S} 확인")
+    st.caption(f"경의중앙선 전체 {total_rows}건 수신 · 마지막 갱신 : {now():%H:%M:%S}")
     st.selectbox(
         "관측할 회기 방향 열차",
         ["현재 관측 중인 열차 없음"],
@@ -269,7 +269,7 @@ def render_empty_panel(total_rows: int) -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", "-")
     c2.metric("운행 상태", "-")
-    c3.metric("앱 실행 후 관측시간", "-")
+    c3.metric("데이터 지속시간", "-")
     c4.metric("마지막 정보 수신", "-")
     st.caption(
         "‘마지막 정보 수신’은 TOPIS에서 최종수신한 시각으로부터 경과된 시간입니다. "
@@ -331,7 +331,7 @@ def live_panel() -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", station)
     c2.metric("운행 상태", status_text(train))
-    c3.metric("앱 실행 후 관측시간", duration_text(duration_minutes), stage_label, delta_color="off")
+    c3.metric("데이터 지속시간", duration_text(duration_minutes), stage_label, delta_color="off")
     c4.metric("마지막 정보 수신", received_age_label, received_time_label, delta_color="off")
     render_stage_duration(train_no)
     st.caption(
