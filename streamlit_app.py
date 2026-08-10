@@ -344,7 +344,6 @@ def live_panel() -> None:
             "현재 역": station,
             "운행 상태": status_text(train),
             "TOPIS 원본 수신시각": received_raw or "미제공",
-            "해석된 수신시각": received_at.strftime("%Y-%m-%d %H:%M:%S") if received_at else "해석 불가",
         })
     st.caption(f"마지막 데이터 갱신 {now():%Y-%m-%d %H:%M:%S} ({REFRESH_SECONDS}초마다 자동 확인)")
 
