@@ -63,7 +63,7 @@ def fetch_positions(api_key: str) -> tuple[list[dict], str | None]:
 rows = payload.get("realtimePositionList")
 
 if rows is None:
-    return [], f"TOPIS 응답에 열차 목록이 없습니다. 응답: {payload}"
+    return [], (f"TOPIS 응답에 열차 목록이 없습니다. 응답: {payload}")
 
 return rows, None
 
