@@ -16,7 +16,7 @@ API_BASE = "http://swopenapi.seoul.go.kr/api/subway"
 TRACK = ["망우", "상봉", "중랑", "회기"]
 TARGET_UPDN_LINES = {"상행", "0"}
 STATUS_LABELS = {"0": "진입", "1": "도착", "2": "출발", "3": "전역 출발"}
-REFRESH_SECONDS = 5
+REFRESH_SECONDS = 90
 STAGE_TRACKING_EXPIRY_SECONDS = 180
 
 
