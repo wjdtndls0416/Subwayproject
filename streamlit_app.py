@@ -34,6 +34,7 @@ def secret_key() -> str:
 @st.cache_data(ttl=4, show_spinner=False)
 def fetch_positions(api_key: str) -> tuple[list[dict], str | None]:
     url = f"{API_BASE}/{api_key}/json/realtimePosition/1/200/{LINE_NAME}"
+
     try:
         response = requests.get(url, timeout=8)
         response.raise_for_status()
@@ -41,31 +42,40 @@ def fetch_positions(api_key: str) -> tuple[list[dict], str | None]:
     except (requests.RequestException, ValueError) as exc:
         return [], f"TOPIS 연결 실패: {exc}"
 
-    # 오류가 응답 최상단에 오는 경우
-    if payload.get("code") and payload.get("code") != "INFO-000":
+    # 오류 정보가 응답 최상단에 있는 경우
+    top_level_code = str(payload.get("code", ""))
+
+    if top_level_code and top_level_code != "INFO-000":
         return [], (
-            f"TOPIS API 오류: {payload.get('code')} · "
+            f"TOPIS API 오류: {top_level_code} · "
             f"{payload.get('message', '원인을 확인할 수 없습니다.')}"
         )
 
-    # 정상 응답 내부의 오류정보 확인
+    # errorMessage 내부의 오류 정보 확인
     error = payload.get("errorMessage", {})
-    if error:
-        status = int(error.get("status", 200))
-        code = error.get("code", "")
 
-    if status != 200 or code not in ("", "INFO-000"):
+    if error:
+        try:
+            status = int(error.get("status", 200))
+        except (TypeError, ValueError):
+            status = 200
+
+        error_code = str(error.get("code", ""))
+
+        if status != 200 or error_code not in ("", "INFO-000"):
+            return [], (
+                f"TOPIS API 오류: {error_code or status} · "
+                f"{error.get('message', '원인을 확인할 수 없습니다.')}"
+            )
+
+    rows = payload.get("realtimePositionList")
+
+    if rows is None:
         return [], (
-            f"TOPIS API 오류: {code} · "
-            f"{error.get('message', '원인을 확인할 수 없습니다.')}"
+            f"TOPIS 응답에 열차 목록이 없습니다. 응답: {payload}"
         )
 
-rows = payload.get("realtimePositionList")
-
-if rows is None:
-    return [], (f"TOPIS 응답에 열차 목록이 없습니다. 응답: {payload}")
-
-return rows, None
+    return rows, None
 
 def normalize_station(value: str) -> str:
     return (value or "").replace("역", "").strip()
