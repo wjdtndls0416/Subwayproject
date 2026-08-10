@@ -208,8 +208,6 @@ def render_track(train: dict | None = None) -> None:
     state = str(train.get("trainSttus", "")) if train else ""
     offset = {"3": -0.20, "0": -0.08, "1": 0.0, "2": 0.16}.get(state, 0.0)
     position = min(100, max(0, ((index + offset) / (len(TRACK) - 1)) * 100))
-    # 역 칸(70px)의 중심과 열차(50px)의 중심을 일치시킨다.
-    # 이 보정으로 회기역 도착 상태에서도 열차가 마지막 역 점 바로 위에 놓인다.
     train_left_adjust = 10 - (0.7 * position)
     train_html = '<div class="train"></div>' if train else ""
     nodes = "".join(f'<div class="station"><span class="dot"></span><b>{escape(name)}</b></div>' for name in TRACK)
@@ -230,7 +228,6 @@ def render_track(train: dict | None = None) -> None:
         @media(max-width:600px){{.board{{padding-left:8px;padding-right:8px}}.station{{font-size:.72rem;width:52px}}}}
         </style>
         <div class="board">
-          <div class="board-title">상행 · 망우 → 상봉 → 중랑 → 회기</div>
           <div class="track-wrap"><div class="rail"></div>{train_html}<div class="stations">{nodes}</div></div>
         </div>
         """,
