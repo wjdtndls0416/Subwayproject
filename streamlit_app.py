@@ -33,7 +33,7 @@ def secret_key() -> str:
 
 @st.cache_data(ttl=4, show_spinner=False)
 def fetch_positions(api_key: str) -> tuple[list[dict], str | None]:
-    url = f"{API_BASE}/{api_key}/json/realtimePosition/0/200/{LINE_NAME}"
+    url = f"{API_BASE}/{api_key}/json/realtimePosition/1/200/{LINE_NAME}"
     try:
         response = requests.get(url, timeout=8)
         response.raise_for_status()
