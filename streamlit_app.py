@@ -8,15 +8,17 @@ import requests
 import streamlit as st
 
 
-st.set_page_config(page_title="경의중앙선 실시간 위치", page_icon="🚆", layout="wide")
+st.set_page_config(page_title="회기역 열차 접근 현황", page_icon="🚆", layout="wide")
 
 SEOUL = ZoneInfo("Asia/Seoul")
 LINE_NAME = "경의중앙선"
-API_BASE = "http://swopenapi.seoul.go.kr/api/subway"
+API_BASE = "https://swopenapi.seoul.go.kr/api/subway"
 TRACK = ["중랑", "회기", "청량리", "왕십리"]
 TARGET_UPDN_LINES = {"상행", "0"}
 STATUS_LABELS = {"0": "진입", "1": "도착", "2": "출발", "3": "전역 출발"}
 REFRESH_SECONDS = 5
+STALL_WARNING_MINUTES = 6
+MAX_SNAPSHOT_GAP_SECONDS = 150
 
 
 def now() -> datetime:
@@ -75,32 +77,16 @@ def train_label(row: dict) -> str:
     return f'{row.get("trainNo", "번호 미상")}열차 · {station} {status_text(row)} · {row.get("statnTnm", "행선지 미상")}행'
 
 
-def arrival_estimate(row: dict) -> tuple[str, str]:
-    """실측 학습 전까지는 역 단계와 운행상태에 따른 범위만 보여준다."""
-    station = normalize_station(row.get("statnNm", ""))
-    state = str(row.get("trainSttus", ""))
-    if station == "중랑":
-        ranges = {"0": "약 3~5분", "1": "약 3~4분", "2": "약 2~3분", "3": "약 4~6분"}
-        return ranges.get(state, "약 3~5분"), "중랑역 위치·운행상태 기반 임시 범위"
-    if station == "회기":
-        if state in {"0", "3"}:
-            return "곧 도착", "회기역 진입 단계"
-        if state == "1":
-            return "현재 도착", "회기역 도착 단계"
-        return "회기역 출발", "이미 회기역을 지난 열차"
-    if station in {"청량리", "왕십리"}:
-        return "이미 통과", f"현재 {station}역"
-    return "계산 불가", "관측 구간 밖"
-
-
 def record_minute_snapshot(rows: list[dict]) -> None:
     snapshots = st.session_state.setdefault("minute_snapshots", [])
-    minute_key = now().strftime("%Y-%m-%d %H:%M")
+    observed_at = now()
+    minute_key = observed_at.strftime("%Y-%m-%d %H:%M")
     if snapshots and snapshots[-1]["minute_key"] == minute_key:
         return
     snapshots.append({
         "minute_key": minute_key,
-        "time": now().strftime("%H:%M"),
+        "observed_at": observed_at.isoformat(),
+        "time": observed_at.strftime("%H:%M"),
         "trains": [
             {
                 "train_no": str(row.get("trainNo", "-")),
@@ -112,6 +98,64 @@ def record_minute_snapshot(rows: list[dict]) -> None:
         ],
     })
     del snapshots[:-30]
+
+
+def detect_stalled_stage(selected_train_no: str) -> tuple[bool, float, str]:
+    """같은 위치 단계가 끊김 없이 유지된 시간을 계산한다."""
+    snapshots = st.session_state.get("minute_snapshots", [])
+    consecutive: list[tuple[datetime, dict]] = []
+
+    for snapshot in reversed(snapshots):
+        train = next(
+            (item for item in snapshot["trains"] if item["train_no"] == selected_train_no),
+            None,
+        )
+        if train is None:
+            break
+
+        try:
+            observed_at = datetime.fromisoformat(snapshot["observed_at"])
+        except (KeyError, TypeError, ValueError):
+            break
+
+        stage = (train["station"], train["status"])
+        if consecutive:
+            newer_time, newer_train = consecutive[-1]
+            newer_stage = (newer_train["station"], newer_train["status"])
+            gap_seconds = (newer_time - observed_at).total_seconds()
+            if stage != newer_stage or gap_seconds > MAX_SNAPSHOT_GAP_SECONDS:
+                break
+
+        consecutive.append((observed_at, train))
+
+    if not consecutive:
+        return False, 0.0, "관측 기록 수집 중"
+
+    latest_time, latest_train = consecutive[0]
+    earliest_time, _ = consecutive[-1]
+    unchanged_minutes = max(0.0, (latest_time - earliest_time).total_seconds() / 60)
+    stage_label = f'{latest_train["station"]} · {latest_train["status"]}'
+    is_stalled = unchanged_minutes >= STALL_WARNING_MINUTES
+    return is_stalled, unchanged_minutes, stage_label
+
+
+def render_stage_warning(selected_train_no: str) -> None:
+    is_stalled, unchanged_minutes, stage_label = detect_stalled_stage(selected_train_no)
+    if is_stalled:
+        st.error(
+            f"🚨 이 열차는 약 {unchanged_minutes:.0f}분 동안 위치 단계가 "
+            f"‘{stage_label}’에서 변하지 않았습니다.\n\n"
+            "평상시보다 이동이 지연되고 있거나 실시간 정보 갱신에 이상이 있을 "
+            "가능성이 있습니다. 현재 도착예정정보의 신뢰도가 낮습니다."
+        )
+    else:
+        remaining = max(0, STALL_WARNING_MINUTES - unchanged_minutes)
+        st.success(
+            f"현재 위치 단계 이상은 감지되지 않았습니다. "
+            f"‘{stage_label}’ 단계 연속 관측 약 {unchanged_minutes:.0f}분"
+        )
+        if 0 < unchanged_minutes < STALL_WARNING_MINUTES:
+            st.caption(f"같은 단계가 약 {remaining:.0f}분 더 유지되면 확인 필요 경고를 표시합니다.")
 
 
 def render_track(train: dict) -> None:
@@ -153,7 +197,7 @@ def render_timeline(selected_train_no: str) -> None:
         train = next((item for item in snapshot["trains"] if item["train_no"] == selected_train_no), None)
         if train:
             entries.append((snapshot["time"], train))
-    st.subheader("데이터 갱신 타임라인")
+    st.subheader("1분 단위 관측 타임라인")
     if not entries:
         st.info("앱을 켠 뒤 첫 1분 기록을 수집하고 있어요.")
         return
@@ -161,7 +205,9 @@ def render_timeline(selected_train_no: str) -> None:
         st.markdown(f"**{observed_time}**　`{item['station']} · {item['status']}`　→ {item['destination']}행")
 
 
-st.title("경의중앙선 실시간 위치")
+st.title("🚆 회기역 열차 접근 현황")
+st.caption("중랑 → 회기 → 청량리 → 왕십리 · 회기역에서 왕십리 방향 열차를 타기 위한 실시간 관측")
+st.info("이 버전은 출발 시각을 판단하지 않습니다. 중랑역에서 회기역으로 접근하는 열차의 위치와 관측 기록에 집중합니다.")
 
 key = secret_key()
 if not key:
@@ -188,34 +234,45 @@ def live_panel() -> None:
         return
 
     labels = {train_label(row): row for row in observed}
-    choice = st.selectbox("현재 관측 중인 열차 정보", labels, key="selected_train")
+    choice = st.selectbox("관측할 왕십리 방향 열차", labels, key="selected_train")
     train = labels[choice]
     station = normalize_station(train.get("statnNm", ""))
-    estimate, basis = arrival_estimate(train)
-    received = parse_api_time(str(train.get("lastRecptnDt", "")))
+    train_no = str(train.get("trainNo", "-"))
+    received_raw = train.get("lastRecptnDt") or train.get("recptnDt") or ""
+    received = parse_api_time(str(received_raw))
     age = max(0, (now() - received).total_seconds()) if received else None
+    is_stalled, unchanged_minutes, _ = detect_stalled_stage(train_no)
 
     render_track(train)
     st.write("")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("현재 위치", station)
     c2.metric("운행 상태", status_text(train))
-    c3.metric("회기역 도착", estimate)
+    c3.metric(
+        "위치 단계 상태",
+        "확인 필요" if is_stalled else "정상 관측",
+        f"같은 단계 {unchanged_minutes:.0f}분",
+        delta_color="inverse" if is_stalled else "normal",
+    )
     c4.metric("데이터 나이", f"{age:.0f}초" if age is not None else "확인 불가")
+    render_stage_warning(train_no)
 
     left, right = st.columns([1.45, 1])
     with left:
-        render_timeline(str(train.get("trainNo", "-")))
+        render_timeline(train_no)
     with right:
-        st.subheader("실시간 API 정보")
+        st.subheader("현재 API 정보")
         st.json({
             "열차번호": train.get("trainNo"),
             "현재 역": station,
             "운행 상태": status_text(train),
             "방향/행선지": f'{train.get("updnLine", "")} / {train.get("statnTnm", "")}',
-            "TOPIS 수신시각": train.get("lastRecptnDt"),
+            "TOPIS 수신시각": received_raw or "확인 불가",
         })
-    st.caption(f"마지막 데이터 갱신 {now():%Y-%m-%d %H:%M:%S} ({REFRESH_SECONDS}초마다 자동 갱신)")
+    st.caption(f"마지막 화면 갱신 {now():%Y-%m-%d %H:%M:%S} · {REFRESH_SECONDS}초마다 자동 확인")
 
 
 live_panel()
+
+st.divider()
+st.caption("서울시 TOPIS 실시간 열차 위치정보를 활용한 개인 탐구용 프로토타입입니다. 서울시 공공데이터 출처를 표시합니다.")
